@@ -58,14 +58,16 @@ GO
       if @step<=1 begin /* build create table query, store it and execute */
         set @qry='select @qry_out=''create table ''+@obj_name+'' (''+replace(replace((
             select ''"[''+col.name+''] ''
-                  +typ.name
-                  +case when typ.name in (''varchar'',''char'',''nchar'',''nvarchar'',''varbinary'',''binary'') then ''(''+case when col.max_length<0 then ''max'' when left(typ.name,1)=''N'' then cast(col.max_length/2 as nvarchar(20)) else cast(col.max_length as nvarchar(20)) end+'')'' else '''' end
-                  +case when col.is_nullable=1 then '''' else '' not null'' end
+                  +case when col.is_computed=0 then typ.name else '''' end
+                  +case when col.is_computed=0 and typ.name in (''varchar'',''char'',''nchar'',''nvarchar'',''varbinary'',''binary'') then ''(''+case when col.max_length<0 then ''max'' when left(typ.name,1)=''N'' then cast(col.max_length/2 as nvarchar(20)) else cast(col.max_length as nvarchar(20)) end+'')'' else '''' end
+                  +case when col.is_computed=1 or col.is_nullable=1 then '''' else '' not null'' end
                   +case when col.is_identity=1 then '' identity(1,1)'' else '''' end
+                  +case when col.is_computed=1 then ''as ''+com.[definition] + case when com.is_persisted=1 then '' persisted'' else '''' end else '''' end
                   +''"'' as ''data()''
               from '+@src+'.sys.objects obj
                 join '+@src+'.sys.columns col on col.object_id=obj.object_id
                 join '+@src+'.sys.types typ on typ.user_type_id=col.user_type_id
+                left join '+@src+'.sys.computed_columns com on com.object_id=col.object_id and com.column_id=col.column_id
               where obj.Type=''U''
                 and obj.object_id=@obj_id
               order by col.column_id
@@ -81,7 +83,7 @@ GO
       from (
         select case when idc.name is null then 0 else 1 end as IsIdentity,
                ''[''+shm.name+''].[''+tbl.name+'']'' as TabFullName,
-               replace(replace((select ''"[''+col.name+'']"'' as ''data()'' from '+@src+'.sys.columns col where col.[object_id]=tbl.[object_id] and col.system_type_id!=189 /* timestamp cannot be copied */ order by col.name for xml path('''')),''" "'',''", "''),''"'','''') as Cols,
+               replace(replace((select ''"[''+col.name+'']"'' as ''data()'' from '+@src+'.sys.columns col where col.[object_id]=tbl.[object_id] and col.is_computed=0 and col.system_type_id!=189 /* timestamp cannot be copied */ order by col.name for xml path('''')),''" "'',''", "''),''"'','''') as Cols,
                tbl.name as TabName,
                idc.name as IDC
           from '+@src+'.sys.objects tbl
@@ -337,4 +339,5 @@ GO
   end
 
   drop table dbp_level1;
+
 
